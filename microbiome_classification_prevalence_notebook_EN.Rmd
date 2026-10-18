@@ -1,0 +1,497 @@
+---
+title: "Microbiome Data Analysis: Study Classification and Prevalence"
+subtitle: "A student-oriented R Markdown notebook"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+# 1. Scientific Thinking Before Coding
+
+## 1.1 Brainstorming: Understanding the Data Structure
+
+Before starting the analysis, brainstorm and explore possible relationships between variables to understand what the dataset represents. This does not mean assuming that relationships are true; it means developing initial questions and then evaluating them with appropriate analyses.
+
+Start by asking:
+
+- What does each row represent: a sample, a participant, or a microorganism?
+- What do the columns represent: identifiers, diagnosis, clinical information, or microbial abundance?
+- Are there multiple samples from the same participant?
+- Which diagnosis groups are present, and how many samples and unique participants are in each group?
+- Are abundance values raw counts or relative abundances?
+- Which clinical variables are available, such as age, sex, symptoms, and treatment?
+
+**Important:** The number of rows is not necessarily the number of unique participants. One participant may contribute multiple samples.
+
+## 1.2 Classifying the Study by Research Focus
+
+### Level 1 — Microbiome-level analysis
+
+Study the microbiome itself, without including the participant's clinical characteristics in the primary analysis.
+
+- Microbial abundance and prevalence
+- Alpha diversity and beta diversity
+- Differential abundance
+- Identification of microorganisms associated with disease
+
+**Main research question**
+
+What changes occur in the composition, diversity, and abundance of the gut microbiome in patients with Crohn’s Disease and Ulcerative Colitis compared with individuals without IBD?
+
+**Sub-questions**
+
+- Which microorganisms differ in abundance and prevalence between groups?
+- Which microorganisms are associated with each disease group?
+- Which microorganisms show changes in abundance between healthy individuals and patients?
+
+### Level 2 — Microbiome–Clinical Association Analysis
+
+Study the relationships between the microbiome and the participant's clinical and demographic characteristics.
+
+- Associations between microorganisms and age or sex
+- Associations between microbiome composition and diagnosis: CD, UC, and nonIBD
+- Associations with symptoms, clinical status, and treatment, if these data are available
+- Identification of factors that may influence these associations
+
+**Main research question**
+
+How are gut microbiome characteristics associated with the demographic and clinical characteristics of patients with IBD?
+
+**Sub-questions**
+
+- Is the abundance of particular microorganisms associated with participant age or sex?
+- Are microbial patterns associated with disease symptoms or severity, if these data are available?
+- Do microbial associations differ between patients with Crohn’s Disease and Ulcerative Colitis?
+- Does the association between a microorganism and disease remain after accounting for factors such as age, sex, and treatment?
+
+### Level 3 — Integrated Host–Microbiome Analysis
+
+Integrate microbiome data with participant data to investigate complex relationships between microorganisms, disease, and the host.
+
+- Analysis of networks and potential interactions among microorganisms
+- Linking microbial patterns to clinical characteristics
+- Using machine learning to identify microbial signatures associated with disease
+- Interpreting findings biologically while recognizing that association does not establish causation
+
+**Main research question**
+
+How do microbial patterns and the clinical and demographic characteristics of participants jointly help explain differences between people with IBD and those without IBD?
+
+**Sub-questions**
+
+- Are there groups of microorganisms that show shared association patterns with particular clinical characteristics?
+- Can microbial signatures distinguish Crohn’s Disease from Ulcerative Colitis and individuals without IBD?
+- Does combining microbiome and clinical data improve group discrimination compared with using microbiome data alone?
+- Do microbial interaction networks reveal patterns associated with different disease states?
+
+## 1.3 Workflow Strategy for This Notebook
+
+This notebook focuses first on **Level 1: Microbiome-level analysis**, particularly ordering diagnosis groups, checking row and participant counts, and calculating the **prevalence** of each microorganism within each group.
+
+1.  Load the merged dataset.
+2.  Order diagnoses as CD, UC, and nonIBD.
+3.  Check the number of rows and unique participants.
+4.  Select the columns needed for microbiome analysis.
+5.  Separate each diagnosis group.
+6.  Calculate the prevalence of each microorganism within each group.
+7.  Extract microorganisms present in at least 50% of rows/samples in each group.
+
+**Methodological note:** In the current code, prevalence is calculated across rows within each group. If each row represents a sample, this is prevalence among samples, not necessarily among unique participants. The 50% threshold is a filtering choice used in this notebook, not a universal biological cutoff.
+
+# 2. Load and Prepare the Data
+
+## STEP 01 — Read the Dataset
+
+```{r}
+microbiom<-read.csv("C:/Users/R DM/OneDrive/Desktop/Bactiriom data analysis/merged_table.csv")
+```
+
+**Brief explanation:** Reads `merged_table.csv` and stores its contents in a data frame named `microbiom`. The file must be in the current working directory, or the correct file path must be provided.
+
+## STEP 02 — Remove the X Column
+
+```{r}
+microbiom$X<-NULL
+```
+
+**Brief explanation:** Removes the `X` column from the data frame. This is often an extra column created when row numbers were previously saved to a CSV file.
+
+# 3. Classification Table by Disease
+
+## STEP 03 — Define the Diagnosis Order
+
+```{r}
+group_order <- c("CD", "UC", "nonIBD")
+```
+
+**Brief explanation:** Defines the desired order of diagnosis groups: Crohn’s Disease, Ulcerative Colitis, and nonIBD.
+
+## STEP 04 — Order Rows by Diagnosis
+
+```{r}
+microbiom <- microbiom[
+  order(match(microbiom$diagnosis, group_order)),
+]
+```
+
+**Brief explanation:** Reorders the rows of `microbiom` according to the sequence specified in `group_order`.
+
+## STEP 05 — Save the Ordered Dataset
+
+```{r}
+write.csv(microbiom ,"diagnosis_order.csv",row.names = TRUE)
+```
+
+**Brief explanation:** Saves the ordered dataset as `diagnosis_order.csv`, including row names.
+
+## STEP 06 — Count Rows in Each Diagnosis Group
+
+```{r}
+sum(microbiom$diagnosis=="CD")
+sum(microbiom$diagnosis=="UC")
+sum(microbiom$diagnosis=="nonIBD")
+```
+
+**Brief explanation:** Counts the rows belonging to each diagnosis group. These are row/sample counts according to the dataset structure, not necessarily counts of unique participants.
+
+## STEP 07 — Extract Unique Participant–Diagnosis Combinations
+
+```{r}
+unique_data <- unique(microbiom[, c("Participant.ID", "diagnosis")])
+```
+
+**Brief explanation:** Keeps unique combinations of `Participant.ID` and `diagnosis`, removing rows where both values are duplicated.
+
+## STEP 08 — Count Unique Combinations by Diagnosis
+
+```{r}
+table(unique_data$diagnosis)
+```
+
+**Brief explanation:** Counts the unique participant–diagnosis combinations in each group. If the same participant appears with different diagnoses, that participant will be counted in more than one group; therefore, diagnosis consistency at the participant level should be checked.
+
+## STEP 09 — Inspect Column Names (Optional)
+
+```{r}
+#colnames(microbiom)
+```
+
+**Brief explanation:** This line is commented out with `#`, so it does not run. Removing `#` displays the column names in the dataset.
+
+## STEP 10 — Select Analysis Columns and Save
+
+```{r}
+microbiom_div<- microbiom[, c(1,2,4,6,7,39:616)]
+write.csv(microbiom_div ,"microbiom_div.csv",row.names = TRUE)
+```
+
+**Brief explanation:** Selects the specified columns by position from `microbiom` and saves the resulting data frame as `microbiom_div.csv`. Confirm that these column positions correspond to the intended variables in your file.
+
+# 4. Crohn’s Disease (CD)
+
+## STEP 11 — Extract CD Rows
+
+```{r}
+CD_data<-microbiom_div[microbiom_div$diagnosis == "CD", ]
+```
+
+**Brief explanation:** Creates a data frame containing only rows with the diagnosis `CD`.
+
+## STEP 13 — Count Microorganisms with Positive Abundance (Optional)
+
+```{r}
+#rowSums(CD_data[, 3:ncol(CD_data)] > 0)
+```
+
+**Brief explanation:** This line is commented out. If run, it counts, for each row, how many columns have values greater than zero, assuming columns 3 through the last column contain microbial abundance values.
+
+## STEP 14 — Select Participant and Microbiome Columns
+
+```{r}
+CD_data_microbiom<-CD_data[,c(1,5:581)]
+```
+
+**Brief explanation:** Selects column 1 and columns 5 through 581 from `CD_data` to create the CD microbiome table.
+
+## STEP 15 — Save the CD Microbiome Data
+
+```{r}
+write.csv(CD_data_microbiom,"CD_data_microbiom.csv",row.names = TRUE)
+```
+
+**Brief explanation:** Saves the CD microbiome table as a CSV file, including row names.
+
+## STEP 17 — Make Row Names Unique
+
+```{r}
+row.names(CD_data_microbiom)<-make.unique(as.character(CD_data_microbiom$Row.names))
+```
+
+**Brief explanation:** Converts the values in `Row.names` to character strings, makes them unique, and uses them as row names. The data frame must contain a column named `Row.names`.
+
+## STEP 18 — Remove the Row.names Column
+
+```{r}
+CD_data_microbiom$Row.names <- NULL
+```
+
+**Brief explanation:** Removes the `Row.names` column after its values have been used as row names.
+
+## STEP 19 — Calculate Microbial Prevalence in CD
+
+```{r}
+prevalence <- colSums(CD_data_microbiom > 0) / nrow(CD_data_microbiom) * 100
+prevalence
+```
+
+**Brief explanation:** Calculates the percentage of rows in which each microorganism has an abundance greater than zero, then displays the percentages. Microbiome columns should be numeric and contain no `NA` values for these calculations to work directly.
+
+## STEP 20 — Keep Microorganisms with Positive Prevalence
+
+```{r}
+CD_data_microbiom <- CD_data_microbiom[, prevalence > 0]
+```
+
+**Brief explanation:** Keeps microorganisms with prevalence greater than zero, meaning they were present in at least one row in the previous calculation.
+
+## STEP 21 — Recalculate Prevalence
+
+```{r}
+prevalence <- colSums(CD_data_microbiom > 0) / nrow(CD_data_microbiom) * 100
+prevalence 
+```
+
+**Brief explanation:** . The following lines recalculate and display prevalence after filtering out microorganisms that were never detected.
+
+## STEP 22 — Transpose the Table
+
+```{r}
+CD_data_microbiom <- as.data.frame(t(CD_data_microbiom))
+```
+
+**Brief explanation:** Transposes the data frame, swapping rows and columns so that each microorganism becomes a row and each sample becomes a column.
+
+## STEP 23 — Add Prevalence to the Table
+
+```{r}
+CD_data_microbiom <- cbind(
+  prevalence = prevalence,
+  CD_data_microbiom
+)
+```
+
+**Brief explanation:** Adds the `prevalence` vector as the first column, showing the prevalence percentage for each microorganism.
+
+## STEP 24 — Count Microorganisms with Prevalence of at Least 50%
+
+```{r}
+#max(CD_data_microbiom$prevalence)
+#min(CD_data_microbiom$prevalence)
+#median(CD_data_microbiom$prevalence)
+#mean(CD_data_microbiom$prevalence)
+sum(CD_data_microbiom$prevalence>=50)
+```
+
+**Brief explanation:** The first four lines are commented out and can be used to explore prevalence values. The final line counts microorganisms with prevalence of 50% or higher.
+
+## STEP 25 — Filter for Highly Prevalent Microorganisms
+
+```{r}
+CD_data_microbiom_essential <-CD_data_microbiom[CD_data_microbiom$prevalence>=50,]
+```
+
+**Brief explanation:** Creates a new table containing microorganisms detected in at least 50% of rows in the CD group.
+
+## STEP 26 — Save the Essential CD Microbiome Table
+
+```{r}
+write.csv(CD_data_microbiom_essential,"CD_data_microbiom_essential.csv",row.names = TRUE)
+```
+
+**Brief explanation:** Saves the microorganisms that meet the prevalence threshold to a CSV file.
+
+# 5. Ulcerative Colitis (UC)
+
+## STEP 27 — Extract UC Rows
+
+```{r}
+UC_data<-microbiom_div[microbiom_div$diagnosis == "UC", ]
+```
+
+**Brief explanation:** Creates a data frame containing only rows with the diagnosis `UC`.
+
+## STEP 28 — Select Participant and Microbiome Columns
+
+```{r}
+UC_data_microbiom<-UC_data[,c(1,5:581)]
+```
+
+**Brief explanation:** Selects column 1 and columns 5 through 581 from the UC group.
+
+## STEP 29 — Make Row Names Unique
+
+```{r}
+row.names(UC_data_microbiom)<-make.unique(as.character(UC_data_microbiom$Row.names))
+```
+
+**Brief explanation:** Makes the values in `Row.names` unique and uses them as row names.
+
+## STEP 30 — Remove the Row.names Column
+
+```{r}
+UC_data_microbiom$Row.names <- NULL
+```
+
+**Brief explanation:** Removes the `Row.names` column after using it to label the rows.
+
+## STEP 31 — Calculate Microbial Prevalence in UC
+
+```{r}
+prevalence <- colSums(UC_data_microbiom > 0) / nrow(UC_data_microbiom) * 100
+prevalence  
+```
+
+**Brief explanation:** Calculates and displays the percentage of rows in which each microorganism has an abundance greater than zero in the UC group.
+
+## STEP 32 — Keep Microorganisms with Positive Prevalence
+
+```{r}
+UC_data_microbiom <- UC_data_microbiom[, prevalence > 0]  
+```
+
+```{r}
+prevalence <- colSums(UC_data_microbiom > 0) / nrow(UC_data_microbiom) * 100
+prevalence  
+```
+
+**Brief explanation:** Keeps microorganisms detected with positive abundance in at least one row.
+
+## STEP 33 — Transpose the Table
+
+```{r}
+UC_data_microbiom <- as.data.frame(t(UC_data_microbiom))
+```
+
+
+**Brief explanation:** Transposes the table so that each microorganism becomes a row and each sample becomes a column.
+
+## STEP 34 — Add the Prevalence Column
+
+```{r}
+UC_data_microbiom <- cbind(
+  prevalence = prevalence,
+  UC_data_microbiom
+) 
+
+```
+
+**Brief explanation:** Adds the prevalence percentage for each microorganism to the transposed table.
+
+## STEP 35 — Filter Microorganisms with Prevalence of at Least 50%
+
+```{r}
+UC_data_microbiom_essential <-UC_data_microbiom[UC_data_microbiom$prevalence>=50,]
+```
+
+**Brief explanation:** Keeps microorganisms with prevalence of 50% or higher in the UC group.
+
+## STEP 36 — Save the Final UC Table
+
+```{r}
+write.csv(UC_data_microbiom_essential,"UC_data_microbiom_essential.csv",row.names = TRUE)
+```
+
+**Brief explanation:** Saves the microorganisms that meet the prevalence threshold to a CSV file.
+
+# 6. nonIBD
+
+## STEP 37 — Extract nonIBD Rows
+
+```{r}
+nonIBD_data<-microbiom_div[microbiom_div$diagnosis == "nonIBD", ]
+```
+
+**Brief explanation:** Creates a data frame containing only rows with the diagnosis `nonIBD`.
+
+## STEP 38 — Select Participant and Microbiome Columns
+
+```{r}
+nonIBD_data_microbiom<-nonIBD_data[,c(1,5:581)]
+```
+
+**Brief explanation:** Selects column 1 and columns 5 through 581 from the nonIBD group.
+
+## STEP 39 — Make Row Names Unique
+
+```{r}
+row.names(nonIBD_data_microbiom)<-make.unique(as.character(nonIBD_data_microbiom$Row.names))
+```
+
+**Brief explanation:** Makes the values in `Row.names` unique and uses them as row names.
+
+## STEP 40 — Remove the Row.names Column
+
+```{r}
+nonIBD_data_microbiom$Row.names <- NULL
+```
+
+**Brief explanation:** Removes the `Row.names` column after using it to label the rows.
+
+## STEP 41 — Calculate Microbial Prevalence in nonIBD
+
+```{r}
+prevalence <- colSums(nonIBD_data_microbiom > 0) / nrow(nonIBD_data_microbiom) * 100
+prevalence
+```
+
+**Brief explanation:** Calculates and displays the percentage of rows in which each microorganism has an abundance greater than zero in the nonIBD group.
+
+## STEP 42 — Keep Microorganisms with Positive Prevalence
+
+```{r}
+nonIBD_data_microbiom <- nonIBD_data_microbiom[, prevalence > 0]
+```
+
+**Brief explanation:** Keeps microorganisms detected with positive abundance in at least one row.
+
+```{r}
+prevalence <- colSums(nonIBD_data_microbiom > 0) / nrow(nonIBD_data_microbiom) * 100
+prevalence
+```
+
+## STEP 43 — Transpose the Table
+
+```{r}
+nonIBD_data_microbiom <- as.data.frame(t(nonIBD_data_microbiom))
+```
+
+**Brief explanation:** Transposes the table so that each microorganism becomes a row and each sample becomes a column.
+
+## STEP 44 — Add the Prevalence Column
+
+```{r}
+nonIBD_data_microbiom <- cbind(
+  prevalence = prevalence,
+  nonIBD_data_microbiom
+)
+```
+
+**Brief explanation:** Adds the prevalence percentage for each microorganism to the transposed table.
+
+## STEP 45 — Filter Microorganisms with Prevalence of at Least 50%
+
+```{r}
+nonIBD_data_microbiom_essentia<-nonIBD_data_microbiom[nonIBD_data_microbiom$prevalence>=50,]
+```
+
+**Brief explanation:** Keeps microorganisms with prevalence of 50% or higher in the nonIBD group.
+
+## STEP 46 — Save the Final nonIBD Table
+
+```{r}
+write.csv(nonIBD_data_microbiom_essentia,"nonIBD_data_microbiom_essential.csv",row.names = TRUE)
+```
+
+**Brief explanation:** Saves the microorganisms that meet the prevalence threshold to a CSV file.

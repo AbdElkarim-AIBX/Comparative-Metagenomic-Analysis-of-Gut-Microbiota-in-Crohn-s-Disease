@@ -1,0 +1,347 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+### Step 1 — Load the Metadata
+
+Load the metadata dataset into R to begin the data-cleaning process.
+
+```{r}
+metadata <- read.csv("hmp2_metadata_2018-08-20.csv")
+
+```
+
+`read.csv()` reads a CSV file and imports its contents into R as a data frame.
+
+- `metadata` is the variable that stores the imported dataset.
+
+------------------------------------------------------------------------
+
+### Step 2 — Detect Missing Values
+
+Identify missing values in the dataset.
+
+```{r}
+is.na(metadata)
+```
+
+`is.na()` checks each cell in the data frame.
+
+- `TRUE`: the value is missing (`NA`).
+- `FALSE`: the value is present.
+
+The output is a logical matrix with the same dimensions as the dataset.
+
+```{r}
+is.na(metadata) <= 0
+```
+
+This compares each logical value with zero.
+
+- `TRUE` is treated as `1`.
+- `FALSE` is treated as `0`.
+
+Therefore, the expression returns `TRUE` for non-missing values and `FALSE` for missing values.
+
+```{r}
+colSums(is.na(metadata))
+```
+
+`is.na()` identifies missing values, and `colSums()` counts them in each column.
+
+The result is a named vector showing the number of missing values in every column.
+
+```{r}
+nrow(metadata)
+```
+
+`nrow()` returns the total number of rows in the data frame.
+
+Each row represents an observation or sample, depending on the dataset structure.
+
+```{r}
+colSums(is.na(metadata)) == nrow(metadata)
+```
+
+This compares the number of missing values in each column with the total number of rows.
+
+- `TRUE`: every value in the column is missing.
+- `FALSE`: at least one value is present.
+
+```{r}
+sum(colSums(is.na(metadata)) == nrow(metadata))
+```
+
+`sum()` counts how many columns satisfy the condition.
+
+The result is the number of columns containing only missing values.
+
+```{r}
+colSums(is.na(metadata)) > 0
+```
+
+This checks whether each column contains at least one missing value.
+
+- `TRUE`: the column contains one or more missing values.
+- `FALSE`: the column contains no missing values.
+
+```{r}
+sum(colSums(is.na(metadata)) > 0)
+```
+
+This counts the columns containing at least one missing value.
+
+------------------------------------------------------------------------
+
+### Step 3 — Assess Missingness and Select Columns
+
+Identify columns that are entirely missing and evaluate the proportion of missing values in each column.
+
+```{r}
+colSums(is.na(metadata)) == nrow(metadata)
+```
+
+This identifies columns in which all values are missing.
+
+```{r}
+metadata[, colSums(is.na(metadata)) != nrow(metadata)]
+```
+
+This selects all columns that are not entirely missing.
+
+- The empty position before the comma retains all rows.
+- The expression after the comma selects the columns.
+- `!=` means “not equal to.”
+
+The result is a data frame without columns containing only missing values. The original `metadata` object remains unchanged.
+
+```{r}
+colMeans(is.na(metadata)) * 100
+```
+
+This calculates the percentage of missing values in each column.
+
+- `is.na(metadata)` identifies missing values.
+- `colMeans()` calculates the proportion of missing values.
+- Multiplying by `100` converts the proportions into percentages.
+
+For example, a result of `25` means that 25% of the values in that column are missing.
+
+```{r}
+sum(colMeans(is.na(metadata)) > 0.20)
+```
+
+This counts the columns with more than 20% missing values.
+
+The threshold `0.20` represents 20% because `colMeans()` returns proportions rather than percentages.
+
+```{r}
+metadata[, colMeans(is.na(metadata)) <= 0.20]
+```
+
+This selects columns with missing-value proportions less than or equal to 20%.
+
+Columns with more than 20% missing values are excluded from the returned data frame.
+
+```{r}
+metadata_clean <- metadata[, colMeans(is.na(metadata)) <= 0.20]
+```
+
+This stores the selected columns in a new data frame called `metadata_clean`.
+
+The new data frame contains columns with no more than 20% missing values. The original `metadata` object remains unchanged.
+
+------------------------------------------------------------------------
+
+### Step 4 — Inspect and Handle Remaining Missing Values
+
+Inspect the remaining missing values and handle selected columns.
+
+```{r}
+colSums(is.na(metadata_clean)) > 0
+```
+
+This checks which columns in `metadata_celan` contain at least one missing value.
+
+- `TRUE`: the column contains missing values.
+- `FALSE`: the column contains no missing values.
+
+```{r}
+sum(colSums(is.na(metadata_clean)) > 0)
+```
+
+This counts the columns in metadata_clean that still contain missing values.
+
+```{r}
+which(colSums(is.na(metadata_clean)) > 0)
+```
+
+`which()` returns the numerical positions of columns containing at least one missing value.
+
+These positions help identify which columns require further inspection.
+
+```{r}
+metadata_clean[, 46]
+```
+
+This selects and displays the 46th column of `metadata_celan`.
+
+The column's meaning depends on its name and its position in the data frame.
+
+```{r}
+metadata_clean$consent_age[is.na(metadata_clean$consent_age)] <- 44
+```
+
+This replaces missing values in the `consent_age` column with `44`.
+
+- `$consent_age` accesses the specified column.
+- `is.na()` identifies missing entries.
+- `<- 44` assigns the value `44` to those entries.
+
+This is a fixed-value imputation method. The replacement value should be justified by the study's methodology or the dataset documentation.
+
+```{r}
+metadata_clean$consent_age
+```
+
+This displays the `consent_age` column after replacement, allowing the updated values to be inspected.
+
+```{r}
+metadata_clean[, 6]
+```
+
+This selects and displays the sixth column of `metadata_celan`.
+
+Its meaning should be confirmed using the column name rather than relying only on its numerical position.
+
+```{r}
+mean(metadata_clean$week_num, na.rm = TRUE)
+```
+
+This calculates the mean of the `week_num` column while excluding missing values.
+
+- `mean()` calculates the arithmetic average.
+- `na.rm = TRUE` removes missing values from the calculation.
+
+The result represents the average of the observed values.
+
+```{r}
+metadata_clean$week_num[is.na(metadata_clean$week_num)] <- 18
+```
+
+This replaces all missing values in `week_num` with `18`.
+
+The assignment modifies the column directly in `metadata_celan`. The value `18` should be justified before using it as an imputation value.
+
+------------------------------------------------------------------------
+
+### Step 5 — Verify Remaining Missing Values
+
+Check the total number of missing values remaining after the cleaning operations.
+
+```{r}
+sum(is.na(metadata_clean))
+```
+
+`is.na()` identifies all missing cells in the data frame, and `sum()` counts them.
+
+- A result of `0` means that no missing values remain.
+- A result greater than `0` means that some missing values are still present.
+
+# Microbiome Data Cleaning and Integration
+
+## Step 1: empty Values
+
+**Question 01:** I have empty values in some columns. What steps should I take to identify, investigate, and handle them appropriately?
+
+```{r}
+metadata_clean <- metadata_clean[, colMeans(is.na(metadata_clean) | metadata_clean == "") <= 0.20]
+metadata_clean
+```
+
+## Step 2: Statistical Interpretation
+
+**Question 02:**Do you think I need "Yes" or "No" to provide a statistical interpretation? If yes, tell me why. If no, tell me why.
+
+```{r}
+metadata_clean <- metadata_clean[, colSums(metadata_clean == "Yes") != nrow(metadata_clean) & colSums(metadata_clean == "No",) != nrow(metadata_clean)]
+```
+
+## Step 3: Feature Selection
+
+**Question 03:** After cleaning the data, which essential features should I select for my study, and why?
+
+```{r}
+metadata_clean <- metadata_clean[metadata_clean$data_type == "metagenomics", ]
+```
+
+## Step 4: Identifying Essential Columns
+
+**Question 04:** Which essential columns do I need to identify in both the metadata and taxonomy tables before merging them?
+
+```{r}
+#colnames(metadata_clean)
+cols_to_remove <- c("site_sub_coll" ,  "visit_num" ,"IntervalName","IntervalSequence","ProjectSpecificID","Education.Level" ,"Occupation","Hispanic.or.Latino.Origin","Research.Project","site_name","Project","Participant.ID")
+metadata_clean <- metadata_clean[, !names(metadata_clean) %in% cols_to_remove]
+metadata_clean
+```
+
+```{r}
+taxonomy<-read.delim("hmp2_mgx_taxonomy.tsv")
+```
+
+## Step 5: Understanding Taxonomy Values
+
+**Question 05:** What does each cell value in the taxonomy table represent? Are zeros biologically meaningful, and what might they indicate?
+
+## Step 6: Taxonomic Level Selection
+
+**Question 06:** Should I analyze all available microbial taxonomic levels, or select a specific level? Explain your reasoning and recommend an appropriate level for comparing Healthy, Crohn’s disease, and Ulcerative Colitis groups.
+
+```{r}
+taxonomy <- taxonomy[grepl("|s__", taxonomy[[1]], fixed = TRUE), ]
+taxonomy[[1]]<- sub(".*\\|s__", "", taxonomy[[1]])
+```
+
+## Step 7: Merging Metadata and Taxonomy
+
+**Question 07:** I want to merge the metadata and taxonomy tables. What is the appropriate strategy, and how can I implement it in R while preserving correct sample matching?
+
+## Taxonomy
+
+```{r}
+row.names(taxonomy)<-make.unique(as.character(taxonomy$Feature.Sample))
+```
+
+Converts Feature.Sample into character values and uses them as row names. make.unique() ensures that duplicate names become unique.
+
+```{r}
+taxonomy$Feature.Sample<-NULL
+```
+
+Removes Feature.Sample because its identifiers are now stored as row names.
+
+```{r}
+taxonomy <- as.data.frame(t(taxonomy))
+```
+
+t() exchanges rows and columns, and as.data.frame() converts the result back into a data frame. \## metadata
+
+```{r}
+row.names(metadata_clean)<-make.unique(as.character(metadata_clean$External.ID))
+```
+
+Converts External.ID to character values and uses the sample identifiers as row names.
+
+```{r}
+metadata_clean$External.ID<-NULL
+```
+
+Removes External.ID because the sample identifiers are already stored as row names. merged between two table
+
+```{r}
+merged_table<-merge(metadata_clean,taxonomy,by="row.names")
+```
+
+Combines the two tables using their row names as the matching key. By default, merge() keeps only samples whose identifiers appear in both tables.

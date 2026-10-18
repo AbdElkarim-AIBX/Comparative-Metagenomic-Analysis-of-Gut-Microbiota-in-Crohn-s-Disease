@@ -1,0 +1,280 @@
+---
+title: "Microbiome Analysis in Crohn's Disease (CD)"
+output: html_document
+---
+
+## if you dont install packages don't forget do this code in the concel 
+
+```{r}
+#install.packages(c("rmarkdown", "ggplot2", "tidyr"))
+```
+
+# STEP 01 — Load the Data
+
+Read the CSV file into R. Keep the full dataset because later steps need the sample columns.
+
+```{r}
+CD_data_microbiom_essential <- read.csv("C:/Users/R DM/OneDrive/Desktop/Bactiriom data analysis/CD_data_microbiom_essential.csv")
+```
+
+# STEP 02 — Rename the Microorganism Column
+
+Rename the column `X` to `micro-organism`, if the imported file contains a column named `X`.
+
+```{r}
+colnames(CD_data_microbiom_essential)[colnames(CD_data_microbiom_essential) == "X"] <- "micro-organism"
+```
+
+# Question 1: How widespread is each microorganism within CD patient samples?
+
+The `prevalence` column describes how widespread each microorganism is across the CD samples.
+
+## STEP 03 — Sort by Prevalence
+
+Sort microorganisms from the highest prevalence to the lowest.
+
+```{r}
+sorted_data <- CD_data_microbiom_essential[order(CD_data_microbiom_essential$prevalence, decreasing = TRUE), ]
+
+par(mar = c(5, 12, 4, 2))
+
+barplot(
+  rev(sorted_data$prevalence),
+  names.arg = rev(sorted_data$`micro-organism`),
+  horiz = TRUE,
+  las = 1,
+  col = "steelblue",
+  cex.names = 0.7,
+  xlab = "Prevalence (%)",
+  main = "Prevalence Bar Plot of Micro-organisms"
+)
+```
+
+- `order(..., decreasing = TRUE)` sorts rows by prevalence, highest first.
+- `par(mar = ...)` adjusts the plot margins to make room for microorganism names.
+- `barplot(...)` creates the horizontal bar plot.
+
+## STEP 04 — Create a ggplot2 Bar Plot
+
+Create a second prevalence plot using `ggplot2`.
+
+```{r}
+library(ggplot2)
+
+ggplot(CD_data_microbiom_essential, aes(x = reorder(`micro-organism`, -prevalence), y = prevalence)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(
+    x = "Micro-organism",
+    y = "Prevalence (%)",
+    title = "Prevalence Bar Plot of Micro-organisms"
+  ) +
+  theme_minimal()
+```
+
+- `reorder(..., -prevalence)` orders microorganisms by decreasing prevalence.
+- `geom_col()` draws bars using the prevalence values.
+- `coord_flip()` makes the bars horizontal.
+- `labs()` sets the labels and title.
+
+# STEP 05 — Convert Sample Columns to Long Format
+
+Reshape the sample columns into two columns: `sample` and `abundance`. The first two columns (`micro-organism` and `prevalence`) are kept as identifier columns.
+
+```{r}
+library(tidyr)
+
+df_long_2 <- pivot_longer(
+  CD_data_microbiom_essential,
+  cols = 3:ncol(CD_data_microbiom_essential),
+  names_to = "sample",
+  values_to = "abundance"
+)
+
+df_long_2$prevalence <- NULL
+```
+
+- `pivot_longer()` converts the sample columns into rows.
+- `names_to = "sample"` stores sample names.
+- `values_to = "abundance"` stores abundance values.
+- `df_long_2$prevalence <- NULL` removes the prevalence column from the long-format table.
+
+# Question 2: Which species shows the greatest variation in abundance among the CD samples?
+
+## STEP 06 — Plot Abundance Values
+
+Plot the abundance values for the first 750 rows of the long-format table.
+
+```{r}
+n_rows <- min(750, nrow(df_long_2))
+
+ggplot(df_long_2[1:n_rows, ], aes(x = seq_len(n_rows), y = abundance)) +
+  geom_point(color = "steelblue", size = 1.5) +
+  labs(
+    title = "Scatter Plot of Abundance",
+    x = "Observation",
+    y = "Abundance"
+  ) +
+  theme_minimal()
+```
+
+- `min(750, nrow(df_long_2))` avoids asking for more rows than the dataset contains.
+- `geom_point()` plots abundance observations.
+
+## STEP 07 — Compare Abundance Across Microorganisms
+
+Select up to 750 samples and show a separate panel for each microorganism.
+
+```{r}
+samples_750 <- unique(df_long_2$sample)[seq_len(min(750, length(unique(df_long_2$sample))))]
+df_sub <- df_long_2[df_long_2$sample %in% samples_750, ]
+
+ggplot(df_sub, aes(x = sample, y = abundance)) +
+  geom_point(color = "steelblue", size = 1) +
+  facet_wrap(~ `micro-organism`, scales = "free_y") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+```
+
+- `samples_750` selects up to 750 distinct sample names.
+- `facet_wrap()` creates a separate panel for each microorganism.
+- `scales = "free_y"` allows each microorganism panel to use its own y-axis scale.
+
+# Question 3: What is the distribution pattern of relative abundance for each species across CD patient samples?
+
+## STEP 08 — Create Boxplots
+
+Use the first 21 unique samples to display the distribution of abundance for each microorganism.
+
+```{r}
+samples_21 <- unique(df_long_2$sample)[seq_len(min(21, length(unique(df_long_2$sample))))]
+df_sub <- df_long_2[df_long_2$sample %in% samples_21, ]
+
+ggplot(df_sub, aes(x = `micro-organism`, y = abundance)) +
+  geom_boxplot(fill = "lightblue", color = "darkblue", outlier.size = 1) +
+  facet_wrap(~ `micro-organism`, scales = "free") +
+  theme_minimal() +
+  theme(
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    strip.text = element_text(size = 6, face = "bold")
+  )
+```
+
+- `geom_boxplot()` summarizes the distribution, including the median and quartiles.
+- `facet_wrap()` creates a separate panel for each microorganism.
+
+## STEP 09 — Create Violin Plots
+
+A violin plot shows the shape of the abundance distribution for each microorganism.
+
+```{r}
+samples_21 <- unique(df_long_2$sample)[seq_len(min(21, length(unique(df_long_2$sample))))]
+df_sub <- df_long_2[df_long_2$sample %in% samples_21, ]
+
+ggplot(df_sub, aes(x = `micro-organism`, y = abundance)) +
+  geom_violin(fill = "lightblue", color = "darkblue", trim = FALSE) +
+  facet_wrap(~ `micro-organism`, scales = "free") +
+  theme_minimal() +
+  theme(
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    strip.text = element_text(size = 6, face = "bold")
+  )
+```
+
+- `geom_violin()` displays the distribution density.
+- `trim = FALSE` keeps the violin tails from being trimmed to the observed range.
+
+# Question 4: Are the most widespread species the same as those with the highest abundance?
+
+**Null Hypothesis (H₀):** There is no significant monotonic correlation between species prevalence and median relative abundance in CD samples.
+
+**Alternative Hypothesis (H₁):** There is a significant monotonic correlation between species prevalence and median relative abundance in CD samples.
+
+## STEP 10 — Calculate Median Abundance
+
+Calculate the median abundance across the sample columns for each microorganism. The full dataset must still contain the sample columns for this step.
+
+```{r}
+CD_data_microbiom_essential$Median_Abundance <- apply(
+  CD_data_microbiom_essential[, 3:ncol(CD_data_microbiom_essential)],
+  1,
+  median,
+  na.rm = TRUE
+)
+```
+
+- `[, 3:ncol(...)]` selects the sample columns.
+- `apply(..., 1, median)` calculates the median across each row.
+- `na.rm = TRUE` ignores missing values when calculating the median.
+
+## STEP 11 — Test the Spearman Correlation
+
+Test whether prevalence and median abundance are monotonically associated.
+
+```{r}
+cor.test(
+  CD_data_microbiom_essential$prevalence,
+  CD_data_microbiom_essential$Median_Abundance,
+  method = "spearman",
+  exact = FALSE
+)
+```
+
+- `cor.test()` performs a statistical correlation test.
+- `method = "spearman"` uses Spearman's rank correlation.
+- `exact = FALSE` avoids exact p-value calculation, which can be unsuitable when ties occur.
+
+## STEP 12 — Plot and Annotate the Correlation
+
+Plot prevalence against median abundance, add a linear trend line, and display Spearman's rho.
+
+```{r}
+plot(
+  x = CD_data_microbiom_essential$prevalence,
+  y = CD_data_microbiom_essential$Median_Abundance,
+  main = "Spearman Correlation: Prevalence vs Median Abundance",
+  xlab = "Prevalence (%)",
+  ylab = "Median Relative Abundance",
+  pch = 19,
+  col = "steelblue",
+  cex = 1.2
+)
+
+abline(
+  lm(Median_Abundance ~ prevalence, data = CD_data_microbiom_essential),
+  col = "darkred",
+  lwd = 2
+)
+
+cor_val <- cor(
+  CD_data_microbiom_essential$prevalence,
+  CD_data_microbiom_essential$Median_Abundance,
+  method = "spearman",
+  use = "complete.obs"
+)
+
+mtext(
+  text = paste("Spearman Rho =", round(cor_val, 3)),
+  side = 3,
+  line = 0.5,
+  col = "darkblue",
+  cex = 0.9
+)
+```
+
+- `plot()` creates the scatter plot.
+- `abline(lm(...))` adds a linear trend line.
+- `cor(..., method = "spearman")` calculates Spearman's rho.
+- `mtext()` displays the rho value above the plot.
+
+**Before knitting:** Make sure `CD_data_microbiom_essential.csv` is in the same folder as this `.Rmd` file, or set the RStudio working directory to the folder containing the CSV.

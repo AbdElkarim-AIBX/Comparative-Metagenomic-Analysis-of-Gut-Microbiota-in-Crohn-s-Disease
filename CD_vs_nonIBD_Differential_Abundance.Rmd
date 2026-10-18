@@ -1,0 +1,312 @@
+---
+title: "Differential Abundance Analysis: CD vs nonIBD"
+output: html_document
+---
+
+# STEP 01 — Load the Data
+
+Read the Crohn's disease (CD) and non-IBD datasets from CSV files.
+
+```{r}
+CD_data_microbiom<-read.csv("CD_data_microbiom.csv")  
+```
+
+- `read.csv()` imports the CD dataset.
+- The imported data is stored in `CD_data_microbiom`.
+
+```{r}
+nonIBD_data<-read.csv("C:/Users/R DM/OneDrive/Desktop/Bactiriom data analysis/nonIBD_data.csv") 
+```
+
+- Imports the nonIBD dataset and stores it in `nonIBD_data`.
+
+# CD Microbiome Manipulation
+
+## STEP 02 — Set Row Names for the CD Dataset
+
+Use the `Row.names` column as row names, making duplicate names unique.
+
+```{r}
+row.names(CD_data_microbiom)<-make.unique(as.character(CD_data_microbiom$Row.names)) 
+```
+
+- `as.character()` converts the identifiers to character values.
+- `make.unique()` adds suffixes if identifiers are duplicated.
+- `row.names(...)` assigns these identifiers as row names.
+
+## STEP 03 — Remove Unneeded Columns from the CD Dataset
+
+Remove the identifier, extra `X`, and diagnosis columns before transposing.
+
+```{r}
+CD_data_microbiom$Row.names <- NULL
+CD_data_microbiom$X<-NULL
+CD_data_microbiom$diagnosis<-NULL 
+```
+
+- Assigning `NULL` to a data-frame column removes it.
+- These columns are removed because they are not abundance measurements for the later comparison.
+
+## STEP 04 — Transpose the CD Dataset
+
+Switch rows and columns so microorganisms become rows and samples become columns.
+
+```{r}
+CD_data_microbiom <- as.data.frame(t(CD_data_microbiom))  
+```
+
+- `t()` transposes the data.
+- `as.data.frame()` converts the transposed result back to a data frame.
+
+# nonIBD Manipulation
+
+## STEP 05 — Set Row Names for the nonIBD Dataset
+
+Use the `Row.names` column as row names, making duplicate names unique.
+
+```{r}
+row.names(nonIBD_data)<-make.unique(as.character(nonIBD_data$Row.names)) 
+```
+
+- Converts the identifiers to character values.
+- Makes duplicated identifiers unique.
+- Assigns the identifiers as row names.
+
+## STEP 06 — Remove Unneeded Columns from the nonIBD Dataset
+
+Remove metadata and identifier columns before transposing.
+
+```{r}
+nonIBD_data$X<-NULL
+nonIBD_data$Row.names<-NULL
+nonIBD_data$Participant.ID<-NULL
+nonIBD_data$week_num<-NULL
+nonIBD_data$consent_age<-NULL
+nonIBD_data$diagnosis<-NULL 
+```
+
+- Each assignment to `NULL` removes the named column.
+- The remaining columns should contain the microorganism measurements needed for analysis.
+
+## STEP 07 — Transpose the nonIBD Dataset
+
+Switch rows and columns so microorganisms become rows and samples become columns.
+
+```{r}
+nonIBD_data <- as.data.frame(t(nonIBD_data))
+```
+
+- `t()` transposes the dataset.
+- `as.data.frame()` converts the result to a data frame.
+
+# Match the Microorganisms
+
+## STEP 08 — Count Shared Microorganisms
+
+Count how many row names are shared between the nonIBD and CD datasets.
+
+```{r}
+common_count <- length(intersect(rownames(nonIBD_data), rownames(CD_data_microbiom)))
+```
+
+- `rownames()` retrieves the microorganism names.
+- `intersect()` returns names found in both datasets.
+- `length()` counts the shared names.
+- `common_count` stores the number of shared microorganisms.
+
+# Merge the Datasets
+
+## STEP 09 — Prepare the nonIBD Table
+
+Copy the nonIBD data and add the row names as a column called `micro_organism`.
+
+```{r}
+nonIBD_temp <- nonIBD_data
+nonIBD_temp$micro_organism <- rownames(nonIBD_temp)
+```
+
+- `nonIBD_temp` is a working copy of the nonIBD dataset.
+- The added column stores the microorganism names so they can be used as a merge key.
+
+## STEP 10 — Prepare the CD Table
+
+Copy the CD data and add the row names as a column called `micro_organism`.
+
+```{r}
+CD_temp <- CD_data_microbiom
+CD_temp$micro_organism <- rownames(CD_temp)
+```
+
+- `CD_temp` is a working copy of the CD dataset.
+- The added column stores microorganism names for merging.
+
+## STEP 11 — Merge the Two Tables
+
+Keep microorganisms that occur in both datasets and combine their sample measurements.
+
+```{r}
+merged_CD_nonIBD <- merge(nonIBD_temp, CD_temp, by = "micro_organism") 
+```
+
+- `merge(..., by = "micro_organism")` joins the datasets using microorganism names.
+- By default, `merge()` keeps only names present in both datasets.
+
+## STEP 12 — Set Row Names of the Merged Table
+
+Use the microorganism names as row names.
+
+```{r}
+rownames(merged_CD_nonIBD) <- merged_CD_nonIBD$micro_organism 
+```
+
+- Assigns the microorganism identifier to each row.
+
+## STEP 13 — Remove the Merge-Key Column
+
+Remove `micro_organism` because the same identifiers are now stored as row names.
+
+```{r}
+merged_CD_nonIBD$micro_organism<-NULL
+```
+
+- Removes the `micro_organism` column from the merged data frame.
+
+# Wilcoxon Test
+
+## STEP 14 — Calculate P-values
+
+Compare the nonIBD and CD sample abundances for each microorganism using the Wilcoxon rank-sum test.
+
+```{r}
+nonIBD_cols <- 1:429
+CD_cols     <- 430:ncol(merged_CD_nonIBD)
+p_val <- apply(merged_CD_nonIBD, 1, function(row_values) {
+  wilcox.test(as.numeric(row_values[nonIBD_cols]), 
+              as.numeric(row_values[CD_cols]))$p.value
+})
+merged_CD_nonIBD<- cbind(p_value = p_val, merged_CD_nonIBD)
+```
+
+- `nonIBD_cols` defines the columns treated as nonIBD samples.
+- `CD_cols` defines the columns treated as CD samples.
+- `apply(..., 1, ...)` runs the test for each row (microorganism).
+- `as.numeric()` converts the row values to numeric values for the test.
+- `wilcox.test(... )$p.value` extracts the p-value.
+- `cbind()` adds the p-values as a new column.
+
+**Important:** The fixed split at column 430 assumes the first 429 columns are nonIBD samples and all remaining columns are CD samples. Check that this matches the actual merged table before running the test.
+
+## STEP 15 — Remove NaN P-values
+
+Remove rows whose p-value is `NaN`.
+
+```{r}
+merged_CD_nonIBD <- merged_CD_nonIBD[!is.nan(merged_CD_nonIBD$p_value), ]
+```
+
+- `is.nan()` identifies `NaN` p-values.
+- `!` selects rows where the p-value is not `NaN`.
+- This does not remove ordinary `NA` values; those may need separate handling if present.
+
+# False Discovery Rate (FDR)
+
+## STEP 16 — Adjust P-values for Multiple Testing
+
+Apply the Benjamini–Hochberg (BH) method to adjust p-values across microorganisms.
+
+```{r}
+fdr_values <- p.adjust(merged_CD_nonIBD$p_value, method = "BH")
+merged_CD_nonIBD<- cbind(FDR = fdr_values, merged_CD_nonIBD)
+```
+
+- `p.adjust(..., method = "BH")` calculates BH-adjusted p-values.
+- `cbind()` adds the adjusted values in a column named `FDR`.
+- FDR helps control the false discovery rate when many microorganisms are tested.
+
+# Fold Change
+
+## STEP 17 — Calculate Mean Abundance and log2 Fold Change
+
+Calculate each group's mean abundance and compare CD with nonIBD using log2 fold change.
+
+```{r}
+mean_nonIBD <- rowMeans(as.matrix(merged_CD_nonIBD[, nonIBD_cols]))
+mean_CD     <- rowMeans(as.matrix(merged_CD_nonIBD[, CD_cols]))
+log2FC <- log2((mean_CD + 1e-6) / (mean_nonIBD + 1e-6))
+merged_CD_nonIBD<- cbind(log2FC = log2FC, merged_CD_nonIBD)
+```
+
+- `as.matrix()` converts the selected sample columns to a matrix.
+- `rowMeans()` calculates the mean abundance of each microorganism in each group.
+- `1e-6` is a small pseudocount to avoid division by zero or taking the logarithm of zero.
+- `log2(...)` calculates the log2 fold change.
+- Positive `log2FC` means the mean abundance is higher in CD; negative values mean it is higher in nonIBD.
+- `cbind()` adds the result to the table.
+
+**Important:** Because `p_value`, `FDR`, and `log2FC` are added to the table, the original sample column indices can shift. For reliable results, calculate means from the sample columns before adding these result columns, or identify sample columns explicitly. The original code is preserved here.
+
+# Install EnhancedVolcano
+
+## STEP 18 — Install the Package (Run Only When Needed)
+
+Install `BiocManager` if it is not installed, then install `EnhancedVolcano`. This installation code only needs to be run when the package is not already installed.
+run in concel 
+
+```{r, eval=FALSE}
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+
+BiocManager::install("EnhancedVolcano")
+```
+
+- `requireNamespace()` checks whether `BiocManager` is installed.
+- `install.packages()` installs `BiocManager` if needed.
+- `BiocManager::install()` installs `EnhancedVolcano`.
+- `eval=FALSE` prevents package installation from running every time the report is knitted. Run the code manually in the R console when installation is needed.
+
+## STEP 19 — Load EnhancedVolcano
+
+Load the package for plotting.
+
+```{r}
+library(EnhancedVolcano)
+```
+
+- `library()` makes the installed package available in the current R session.
+
+# Volcano Plot
+
+## STEP 20 — Visualize Differential Abundance
+
+Create a volcano plot comparing CD and nonIBD microorganisms.
+
+```{r}
+EnhancedVolcano(merged_CD_nonIBD,
+     lab = rownames(merged_CD_nonIBD),           
+      x = 'log2FC',                        
+      y = 'p_value',                        
+      pCutoff = 0.05,                         
+      FCcutoff = 1.0,                       
+       pointSize = 2.0,
+       labSize = 1.0,
+       title = 'CD vs nonIBD Differential Abundance',
+       subtitle = 'Volcano plot of microbiome features',
+       legendPosition = 'right',
+        legendLabSize = 10,
+         col = c('grey30', 'forestgreen', 'royalblue', 'red2'),
+        colAlpha = 0.8)
+```
+
+- `lab` supplies microorganism names for point labels.
+- `x = 'log2FC'` places log2 fold change on the x-axis.
+- `y = 'p_value'` uses raw p-values for the significance axis.
+- `pCutoff = 0.05` sets the p-value significance threshold.
+- `FCcutoff = 1.0` highlights features with absolute log2 fold change greater than 1.
+- `pointSize` and `labSize` set point and label sizes.
+- `title` and `subtitle` set the plot headings.
+- `legendPosition` and `legendLabSize` control the legend.
+- `col` sets the colors for the significance categories.
+- `colAlpha` controls point transparency.
+
+**Interpretation:** Points on the right have higher mean abundance in CD; points on the left have higher mean abundance in nonIBD. Points higher on the plot have smaller p-values. For a plot based on adjusted significance, use the `FDR` column for the y input and set the corresponding threshold appropriately.
